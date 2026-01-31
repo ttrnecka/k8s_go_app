@@ -19,6 +19,38 @@
       when: not kubeadm_init.stat.exists
       register: kubeadm_init_output
 
+    - name: Display kubeadm init output
+      debug:
+        msg: "{{ kubeadm_init_output.stdout_lines }}"
+      when: kubeadm_init_output is defined and kubeadm_init_output.changed
+
+    - name: Check if kubeadm init failed
+      fail:
+        msg: "kubeadm init failed: {{ kubeadm_init_output.stderr }}"
+      when: 
+        - kubeadm_init_output is defined
+        - kubeadm_init_output.changed
+        - kubeadm_init_output.rc != 0
+
+    - name: Wait for admin.conf to be created
+      wait_for:
+        path: /etc/kubernetes/admin.conf
+        timeout: 60
+      when: kubeadm_init_output is defined and kubeadm_init_output.changed
+
+    - name: Verify admin.conf is readable
+      command: cat /etc/kubernetes/admin.conf
+      register: verify_admin_conf
+      changed_when: false
+
+    - name: Check admin.conf has proper structure
+      assert:
+        that:
+          - "'apiVersion' in verify_admin_conf.stdout"
+          - "'clusters' in verify_admin_conf.stdout"
+          - "'users' in verify_admin_conf.stdout"
+        fail_msg: "admin.conf doesn't have proper kubeconfig structure"
+
     - name: Create .kube directory for vagrant user
       file:
         path: /home/vagrant/.kube
@@ -49,20 +81,105 @@
         remote_src: yes
         mode: '0600'
 
-    - name: Install Calico CNI
+    - name: Set KUBECONFIG environment variable for root
+      lineinfile:
+        path: /root/.bashrc
+        line: 'export KUBECONFIG=/etc/kubernetes/admin.conf'
+        create: yes
+
+    - name: Set KUBECONFIG environment variable for vagrant
+      lineinfile:
+        path: /home/vagrant/.bashrc
+        line: 'export KUBECONFIG=/home/vagrant/.kube/config'
+        owner: vagrant
+        group: vagrant
+        create: yes
+
+    - name: Wait for API server to be ready
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: 6443
+        timeout: 300
+      retries: 3
+      delay: 10
+
+    - name: Wait for control plane pods to start (even if nodes NotReady)
       become_user: vagrant
       shell: |
-        kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
-      args:
-        creates: /tmp/calico-installed
+        kubectl --kubeconfig=/home/vagrant/.kube/config get pods -n kube-system --no-headers 2>/dev/null | wc -l
+      register: control_plane_pods
+      until: control_plane_pods.stdout|int >= 4
+      retries: 30
+      delay: 10
+      failed_when: false
+
+    - name: Download Calico manifest
+      get_url:
+        url: https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
+        dest: /tmp/calico.yaml
+        mode: '0644'
+
+    - name: Install Calico CNI (this will fix NetworkPluginNotReady)
+      become_user: vagrant
+      command: kubectl apply -f /tmp/calico.yaml
       environment:
         KUBECONFIG: /home/vagrant/.kube/config
+      register: calico_install
+      retries: 3
+      delay: 10
+      until: calico_install.rc == 0
 
     - name: Mark Calico as installed
       file:
         path: /tmp/calico-installed
         state: touch
         mode: '0644'
+
+    - name: Wait for Calico pods to start
+      become_user: vagrant
+      shell: |
+        kubectl get pods -n kube-system -l k8s-app=calico-node --no-headers 2>/dev/null | wc -l
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      register: calico_pods
+      until: calico_pods.stdout|int > 0
+      retries: 12
+      delay: 10
+
+    - name: Wait for all pods to be ready (now that CNI is installed)
+      become_user: vagrant
+      shell: |
+        kubectl wait --for=condition=ready --all pods -n kube-system --timeout=300s 2>/dev/null || echo "Some pods still starting"
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      register: wait_result
+      retries: 3
+      delay: 10
+      failed_when: false
+
+    - name: Verify nodes are now Ready (after CNI installed)
+      become_user: vagrant
+      command: kubectl get nodes
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      register: final_nodes
+      changed_when: false
+
+    - name: Display final node status
+      debug:
+        msg: "{{ final_nodes.stdout_lines }}"
+
+    - name: Check for Ready nodes
+      become_user: vagrant
+      shell: |
+        kubectl get nodes --no-headers | grep -c " Ready" || echo "0"
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      register: ready_count
+
+    - name: Confirm control plane is ready
+      debug:
+        msg: "Control plane setup complete! Ready nodes: {{ ready_count.stdout }}"
 
     - name: Wait for all pods to be ready
       become_user: vagrant
