@@ -1,0 +1,102 @@
+# ansible/playbooks/05-deploy-applications.yml
+---
+- name: Deploy MetalLB, Traefik, and monitoring
+  hosts: control_plane
+  become_user: vagrant
+  vars:
+    kubeconfig: /home/vagrant/.kube/config
+  tasks:
+    - name: Install MetalLB
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Wait for MetalLB pods to be ready
+      shell: |
+        kubectl wait --namespace metallb-system \
+          --for=condition=ready pod \
+          --selector=app=metallb \
+          --timeout=300s
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      retries: 3
+      delay: 10
+
+    - name: Create MetalLB IP address pool configuration
+      shell: |
+        cat <<EOF | kubectl apply -f -
+        apiVersion: metallb.io/v1beta1
+        kind: IPAddressPool
+        metadata:
+          name: default-pool
+          namespace: metallb-system
+        spec:
+          addresses:
+          - 192.168.56.100-192.168.56.110
+        ---
+        apiVersion: metallb.io/v1beta1
+        kind: L2Advertisement
+        metadata:
+          name: default
+          namespace: metallb-system
+        spec:
+          ipAddressPools:
+          - default-pool
+        EOF
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Copy k8s manifests to control plane
+      become: yes
+      copy:
+        src: "{{ playbook_dir }}/../../k8s/"
+        dest: /home/vagrant/k8s/
+        owner: vagrant
+        group: vagrant
+        mode: '0755'
+
+    - name: Deploy Traefik RBAC
+      shell: kubectl apply -f /home/vagrant/k8s/traefik/traefik-rbac.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Deploy Traefik
+      shell: kubectl apply -f /home/vagrant/k8s/traefik/traefik-deployment.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Deploy Traefik Service
+      shell: kubectl apply -f /home/vagrant/k8s/traefik/traefik-service.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Wait for Traefik LoadBalancer IP
+      shell: |
+        kubectl get svc traefik -n kube-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: traefik_ip
+      until: traefik_ip.stdout != ""
+      retries: 10
+      delay: 10
+
+    - name: Display Traefik LoadBalancer IP
+      debug:
+        msg: "Traefik is accessible at: http://{{ traefik_ip.stdout }}"
+
+    - name: Deploy monitoring namespace
+      shell: kubectl apply -f /home/vagrant/k8s/monitoring/
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      ignore_errors: yes
+
+    - name: Display cluster info
+      shell: kubectl get nodes,svc -A
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+      register: cluster_info
+
+    - name: Show cluster status
+      debug:
+        var: cluster_info.stdout_lines

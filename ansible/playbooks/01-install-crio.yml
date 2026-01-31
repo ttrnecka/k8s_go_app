@@ -4,41 +4,35 @@
   hosts: k8s_cluster
   become: yes
   vars:
-    crio_version: "1.28"
-    os: "xUbuntu_22.04"
+    crio_version: "1.31"
+    kubernetes_version: "v1.31"
   tasks:
-    - name: Add CRI-O repository key
-      apt_key:
-        url: "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:/{{ crio_version }}/{{ os }}/Release.key"
-        state: present
+    - name: Create keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
 
-    - name: Add CRI-O stable repository key
-      apt_key:
-        url: "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/{{ os }}/Release.key"
-        state: present
+    - name: Add Kubernetes apt repository key for CRI-O
+      shell: |
+        curl -fsSL https://download.opensuse.org/repositories/isv:/cri-o:/stable:/{{ crio_version }}/deb/Release.key |
+        gpg --dearmor -o /etc/apt/keyrings/cri-o-apt-keyring.gpg
+      args:
+        creates: /etc/apt/keyrings/cri-o-apt-keyring.gpg
 
-    - name: Add CRI-O repository
-      apt_repository:
-        repo: "deb https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:/{{ crio_version }}/{{ os }}/ /"
-        state: present
-        filename: devel:kubic:libcontainers:stable:cri-o
-
-    - name: Add libcontainers stable repository
-      apt_repository:
-        repo: "deb https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/{{ os }}/ /"
-        state: present
-        filename: devel:kubic:libcontainers:stable
+    - name: Add CRI-O apt repository
+      shell: |
+        echo "deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg] https://download.opensuse.org/repositories/isv:/cri-o:/stable:/{{ crio_version }}/deb/ /" |
+        tee /etc/apt/sources.list.d/cri-o.list
 
     - name: Update apt cache
       apt:
         update_cache: yes
 
-    - name: Install CRI-O and dependencies
+    - name: Install CRI-O
       apt:
         name:
           - cri-o
-          - cri-o-runc
-          - cri-tools
         state: present
 
     - name: Start and enable CRI-O
@@ -48,6 +42,25 @@
         enabled: yes
         daemon_reload: yes
 
+    - name: Wait for CRI-O socket
+      wait_for:
+        path: /var/run/crio/crio.sock
+        timeout: 30
+
+    - name: Install cri-tools (crictl)
+      apt:
+        name:
+          - cri-tools
+        state: present
+
+    - name: Configure crictl to use CRI-O
+      copy:
+        dest: /etc/crictl.yaml
+        content: |
+          runtime-endpoint: unix:///var/run/crio/crio.sock
+          image-endpoint: unix:///var/run/crio/crio.sock
+          timeout: 10
+
     - name: Verify CRI-O is running
       command: crictl info
       register: crio_info
@@ -55,5 +68,5 @@
 
     - name: Display CRI-O status
       debug:
-        msg: "CRI-O is running"
+        msg: "CRI-O is running successfully"
       when: crio_info.rc == 0
