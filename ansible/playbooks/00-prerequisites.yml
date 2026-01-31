@@ -20,7 +20,44 @@
           - socat
           - conntrack
           - ipset
+          - chrony
         state: present
+
+    - name: Configure chrony for time synchronization
+      copy:
+        dest: /etc/chrony/chrony.conf
+        content: |
+          # Ubuntu NTP servers
+          pool ntp.ubuntu.com iburst maxsources 4
+          pool 0.ubuntu.pool.ntp.org iburst maxsources 1
+          pool 1.ubuntu.pool.ntp.org iburst maxsources 1
+          pool 2.ubuntu.pool.ntp.org iburst maxsources 2
+          
+          # Allow the system clock to be stepped in the first three updates
+          makestep 1.0 3
+          
+          # Enable kernel synchronization of the real-time clock (RTC)
+          rtcsync
+          
+          # Specify directory for log files
+          logdir /var/log/chrony
+        backup: yes
+
+    - name: Restart and enable chrony
+      systemd:
+        name: chrony
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Force time sync
+      command: chronyc makestep
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Wait for time sync
+      pause:
+        seconds: 5
 
     - name: Disable swap
       shell: swapoff -a

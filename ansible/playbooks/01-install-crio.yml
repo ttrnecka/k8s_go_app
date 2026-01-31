@@ -3,9 +3,6 @@
 - name: Install CRI-O container runtime
   hosts: k8s_cluster
   become: yes
-  vars:
-    crio_version: "1.31"
-    kubernetes_version: "v1.31"
   tasks:
     - name: Create keyrings directory
       file:
@@ -47,19 +44,30 @@
         path: /var/run/crio/crio.sock
         timeout: 30
 
-    - name: Install cri-tools (crictl)
-      apt:
-        name:
-          - cri-tools
-        state: present
+    - name: Download crictl
+      get_url:
+        url: "https://github.com/kubernetes-sigs/cri-tools/releases/download/{{ crictl_version }}/crictl-{{ crictl_version }}-linux-amd64.tar.gz"
+        dest: /tmp/crictl.tar.gz
 
-    - name: Configure crictl to use CRI-O
-      copy:
-        dest: /etc/crictl.yaml
-        content: |
-          runtime-endpoint: unix:///var/run/crio/crio.sock
-          image-endpoint: unix:///var/run/crio/crio.sock
-          timeout: 10
+    - name: Extract and install crictl
+      unarchive:
+        src: /tmp/crictl.tar.gz
+        dest: /usr/local/bin/
+        remote_src: yes
+        mode: '0755'
+
+    - name: Remove crictl tarball
+      file:
+        path: /tmp/crictl.tar.gz
+        state: absent
+        
+    # - name: Configure crictl to use CRI-O
+    #   copy:
+    #     dest: /etc/crictl.yaml
+    #     content: |
+    #       runtime-endpoint: unix:///var/run/crio/crio.sock
+    #       image-endpoint: unix:///var/run/crio/crio.sock
+    #       timeout: 10
 
     - name: Verify CRI-O is running
       command: crictl info

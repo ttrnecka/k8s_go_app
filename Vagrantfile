@@ -13,6 +13,8 @@ Vagrant.configure("2") do |config|
       vb.name = "ansible-controller"
       vb.memory = "1024"
       vb.cpus = 1
+      # Enable time sync with host
+      vb.customize ["setextradata", :id, "VBoxInternal/Devices/VMMDev/0/Config/GetHostTimeDisabled", "0"]
     end
     
     controller.vm.provision "shell", inline: <<-SHELL
@@ -52,6 +54,8 @@ EOF
       vb.name = "k8s-master"
       vb.memory = "2048"
       vb.cpus = 2
+      # Enable time sync with host
+      vb.customize ["setextradata", :id, "VBoxInternal/Devices/VMMDev/0/Config/GetHostTimeDisabled", "0"]
     end
     
     master.vm.provision "shell", inline: <<-SHELL
@@ -79,6 +83,8 @@ EOF
         vb.name = "k8s-worker-#{i}"
         vb.memory = "2048"
         vb.cpus = 2
+        # Enable time sync with host
+        vb.customize ["setextradata", :id, "VBoxInternal/Devices/VMMDev/0/Config/GetHostTimeDisabled", "0"]
       end
       
       worker.vm.provision "shell", inline: <<-SHELL
