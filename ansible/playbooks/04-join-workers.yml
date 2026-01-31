@@ -1,0 +1,50 @@
+# ansible/playbooks/04-join-workers.yml
+---
+- name: Join worker nodes to cluster
+  hosts: workers
+  become: yes
+  tasks:
+    - name: Check if node is already joined
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Copy join command to workers
+      copy:
+        src: /tmp/join-command.sh
+        dest: /tmp/join-command.sh
+        mode: '0755'
+      when: not kubelet_conf.stat.exists
+
+    - name: Join cluster with CRI-O socket
+      shell: "{{ lookup('file', '/tmp/join-command.sh') }} --cri-socket=unix:///var/run/crio/crio.sock"
+      when: not kubelet_conf.stat.exists
+
+    - name: Wait for node to be ready
+      pause:
+        seconds: 30
+      when: not kubelet_conf.stat.exists
+
+- name: Verify cluster status
+  hosts: control_plane
+  become_user: vagrant
+  tasks:
+    - name: Get nodes
+      command: kubectl get nodes
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      register: nodes_output
+
+    - name: Display nodes
+      debug:
+        var: nodes_output.stdout_lines
+
+    - name: Wait for all nodes to be ready
+      shell: |
+        kubectl get nodes | grep -v "NotReady" | grep -c "Ready" || true
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      register: ready_nodes
+      until: ready_nodes.stdout|int >= 3
+      retries: 12
+      delay: 10

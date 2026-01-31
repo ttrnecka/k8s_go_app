@@ -1,0 +1,93 @@
+# ansible/playbooks/03-init-control-plane.yml
+---
+- name: Initialize Kubernetes control plane
+  hosts: control_plane
+  become: yes
+  tasks:
+    - name: Check if cluster is already initialized
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: kubeadm_init
+
+    - name: Initialize Kubernetes cluster
+      command: >
+        kubeadm init
+        --pod-network-cidr={{ pod_network_cidr }}
+        --service-cidr={{ service_cidr }}
+        --apiserver-advertise-address={{ ansible_host }}
+        --cri-socket=unix:///var/run/crio/crio.sock
+      when: not kubeadm_init.stat.exists
+      register: kubeadm_init_output
+
+    - name: Create .kube directory for vagrant user
+      file:
+        path: /home/vagrant/.kube
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: '0755'
+
+    - name: Copy admin.conf to vagrant user
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/vagrant/.kube/config
+        remote_src: yes
+        owner: vagrant
+        group: vagrant
+        mode: '0600'
+
+    - name: Create .kube directory for root
+      file:
+        path: /root/.kube
+        state: directory
+        mode: '0755'
+
+    - name: Copy admin.conf to root
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: yes
+        mode: '0600'
+
+    - name: Install Calico CNI
+      become_user: vagrant
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/calico.yaml
+      args:
+        creates: /tmp/calico-installed
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+
+    - name: Mark Calico as installed
+      file:
+        path: /tmp/calico-installed
+        state: touch
+        mode: '0644'
+
+    - name: Wait for all pods to be ready
+      become_user: vagrant
+      shell: |
+        kubectl wait --for=condition=ready --all pods -n kube-system --timeout=300s
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      register: wait_result
+      retries: 3
+      delay: 10
+      until: wait_result.rc == 0
+      ignore_errors: yes
+
+    - name: Generate join command
+      command: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Save join command to file
+      copy:
+        content: "{{ join_command.stdout }}"
+        dest: /tmp/join-command.sh
+        mode: '0755'
+
+    - name: Fetch join command to local machine
+      fetch:
+        src: /tmp/join-command.sh
+        dest: /tmp/join-command.sh
+        flat: yes

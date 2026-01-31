@@ -1,0 +1,59 @@
+# ansible/playbooks/01-install-crio.yml
+---
+- name: Install CRI-O container runtime
+  hosts: k8s_cluster
+  become: yes
+  vars:
+    crio_version: "1.28"
+    os: "xUbuntu_22.04"
+  tasks:
+    - name: Add CRI-O repository key
+      apt_key:
+        url: "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:/{{ crio_version }}/{{ os }}/Release.key"
+        state: present
+
+    - name: Add CRI-O stable repository key
+      apt_key:
+        url: "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/{{ os }}/Release.key"
+        state: present
+
+    - name: Add CRI-O repository
+      apt_repository:
+        repo: "deb https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:/{{ crio_version }}/{{ os }}/ /"
+        state: present
+        filename: devel:kubic:libcontainers:stable:cri-o
+
+    - name: Add libcontainers stable repository
+      apt_repository:
+        repo: "deb https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/{{ os }}/ /"
+        state: present
+        filename: devel:kubic:libcontainers:stable
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install CRI-O and dependencies
+      apt:
+        name:
+          - cri-o
+          - cri-o-runc
+          - cri-tools
+        state: present
+
+    - name: Start and enable CRI-O
+      systemd:
+        name: crio
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Verify CRI-O is running
+      command: crictl info
+      register: crio_info
+      changed_when: false
+
+    - name: Display CRI-O status
+      debug:
+        msg: "CRI-O is running"
+      when: crio_info.rc == 0
