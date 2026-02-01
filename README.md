@@ -173,13 +173,13 @@ curl http://$TRAEFIK_IP/health
 
 **Grafana**:
 ```bash
-kubectl port-forward -n monitoring svc/grafana 3000:3000
+kubectl port-forward -n monitoring svc/grafana 3000:3000 --address 0.0.0.0
 # Access at http://localhost:3000 (admin/admin)
 ```
 
 **Prometheus**:
 ```bash
-kubectl port-forward -n monitoring svc/prometheus 9090:9090
+kubectl port-forward -n monitoring svc/prometheus 9090:9090 --address 0.0.0.0
 # Access at http://localhost:9090
 ```
 
