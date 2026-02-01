@@ -8,7 +8,7 @@
   tasks:
     - name: Install MetalLB
       shell: |
-        kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml
+        kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/{{metallb_version}}/config/manifests/metallb-native.yaml
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
 
@@ -33,7 +33,7 @@
           namespace: metallb-system
         spec:
           addresses:
-          - 192.168.56.100-192.168.56.110
+          - {{metallb_ip_range}}
         ---
         apiVersion: metallb.io/v1beta1
         kind: L2Advertisement
@@ -85,11 +85,35 @@
       debug:
         msg: "Traefik is accessible at: http://{{ traefik_ip.stdout }}"
 
-    - name: Deploy monitoring namespace
-      shell: kubectl apply -f /home/vagrant/k8s/monitoring/
+    - name: Deploy Prometheus RBAC
+      shell: kubectl apply -f /home/vagrant/k8s/monitoring/prometheus-rbac.yaml
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
-      ignore_errors: yes
+
+    - name: Deploy Prometheus Config
+      shell: kubectl apply -f /home/vagrant/k8s/monitoring/prometheus-config.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Deploy Prometheus
+      shell: kubectl apply -f /home/vagrant/k8s/monitoring/prometheus-deployment.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Deploy Prometheus Service
+      shell: kubectl apply -f /home/vagrant/k8s/monitoring/prometheus-service.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Deploy Grafana Config
+      shell: kubectl apply -f /home/vagrant/k8s/monitoring/grafana-config.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Deploy Grafana
+      shell: kubectl apply -f /home/vagrant/k8s/monitoring/grafana-deployment.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
 
     - name: Display cluster info
       shell: kubectl get nodes,svc -A

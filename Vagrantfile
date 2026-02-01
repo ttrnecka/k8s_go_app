@@ -31,7 +31,24 @@ EOF
       apt-get install -y software-properties-common
       add-apt-repository -y ppa:ansible/ansible
       apt-get update
-      apt-get install -y ansible git vim
+      apt-get install -y ansible git vim chrony
+
+      cat >> /etc/chrony/chrony.conf <<EOF
+# Ubuntu NTP servers
+pool ntp.ubuntu.com iburst maxsources 4
+pool 0.ubuntu.pool.ntp.org iburst maxsources 1
+pool 1.ubuntu.pool.ntp.org iburst maxsources 1
+pool 2.ubuntu.pool.ntp.org iburst maxsources 2
+
+# Allow the system clock to be stepped in the first three updates
+makestep 1.0 -1
+
+# Enable kernel synchronization of the real-time clock (RTC)
+rtcsync
+
+# Specify directory for log files
+logdir /var/log/chrony
+EOF
 
       # Generate SSH key for Ansible
       if [ ! -f /home/vagrant/.ssh/id_rsa ]; then
