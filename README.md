@@ -169,6 +169,16 @@ make ssh-worker-2   # SSH into worker 2
 ```bash
 TRAEFIK_IP=$(kubectl get svc traefik -n kube-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 curl http://$TRAEFIK_IP/health
+
+kubectl -n kube-system port-forward svc/traefik 8080:8080 --address 0.0.0.0
+```
+
+alternatively on Windows provided:
+TRAEFIK_IP = 192.168.56.100
+k8s-master IP = 192.168.56.10
+
+```
+route add 192.168.56.100 mask 255.255.255.255 192.168.56.10
 ```
 
 **Grafana**:
