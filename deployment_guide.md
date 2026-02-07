@@ -186,15 +186,16 @@ cd ..
 docker build -t myapp:latest ./app
 
 # Save and distribute
-docker save myapp:latest | gzip > myapp.tar.gz
-vagrant scp myapp.tar.gz k8s-master:/tmp/
-vagrant scp myapp.tar.gz k8s-worker-1:/tmp/
-vagrant scp myapp.tar.gz k8s-worker-2:/tmp/
+vagrant plugin install vagrant-scp
+docker save -o myapp.tar myapp:latest
+vagrant scp myapp.tar k8s-master:/tmp/
+vagrant scp myapp.tar k8s-worker-1:/tmp/
+vagrant scp myapp.tar k8s-worker-2:/tmp/
 
 # Load on each node
-vagrant ssh k8s-master -c "sudo ctr -n k8s.io images import /tmp/myapp.tar.gz"
-vagrant ssh k8s-worker-1 -c "sudo ctr -n k8s.io images import /tmp/myapp.tar.gz"
-vagrant ssh k8s-worker-2 -c "sudo ctr -n k8s.io images import /tmp/myapp.tar.gz"
+vagrant ssh k8s-master -c "sudo skopeo copy docker-archive:/tmp/myapp.tar containers-storage:localhost/myapp:latest"
+vagrant ssh k8s-worker-1 -c "sudo skopeo copy docker-archive:/tmp/myapp.tar containers-storage:localhost/myapp:latest"
+vagrant ssh k8s-worker-2 -c "sudo skopeo copy docker-archive:/tmp/myapp.tar containers-storage:localhost/myapp:latest"
 
 # Deploy application
 vagrant ssh k8s-master

@@ -87,6 +87,11 @@ EOF
       # Enable password authentication for initial setup
       sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
       systemctl restart sshd
+
+      # Install skopeo for image management
+      apt-get update
+      apt-get install -y skopeo
+
     SHELL
   end
   
@@ -116,6 +121,10 @@ EOF
         # Enable password authentication for initial setup
         sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
         systemctl restart sshd
+
+        # Install skopeo for image management
+        apt-get update
+        apt-get install -y skopeo
       SHELL
     end
   end

@@ -47,6 +47,23 @@ build:
 	cd app && docker build -t $(APP_NAME):$(VERSION) .
 	@echo "Image built: $(APP_NAME):$(VERSION)"
 
+# Load image to nodes using skopeo (pre-installed on VMs)
+load-image: build
+	@echo "Saving image to tarball..."
+	@docker save $(APP_NAME):$(VERSION) | gzip > $(APP_NAME).tar.gz
+	@echo "Copying to nodes..."
+	@vagrant scp $(APP_NAME).tar.gz k8s-master:/tmp/
+	@vagrant scp $(APP_NAME).tar.gz k8s-worker-1:/tmp/
+	@vagrant scp $(APP_NAME).tar.gz k8s-worker-2:/tmp/
+	@echo "Loading image on nodes with skopeo..."
+	@vagrant ssh k8s-master -c "sudo skopeo copy docker-archive:/tmp/$(APP_NAME).tar.gz containers-storage:localhost/$(APP_NAME):$(VERSION)"
+	@vagrant ssh k8s-worker-1 -c "sudo skopeo copy docker-archive:/tmp/$(APP_NAME).tar.gz containers-storage:localhost/$(APP_NAME):$(VERSION)"
+	@vagrant ssh k8s-worker-2 -c "sudo skopeo copy docker-archive:/tmp/$(APP_NAME).tar.gz containers-storage:localhost/$(APP_NAME):$(VERSION)"
+	@echo "Verifying images..."
+	@vagrant ssh k8s-master -c "sudo crictl images | grep $(APP_NAME)"
+	@rm -f $(APP_NAME).tar.gz
+	@echo "Image loaded successfully on all nodes!"
+
 # Deploy Kubernetes cluster using Ansible FROM the controller node
 deploy-cluster: copy-project setup-ssh
 	@echo "Deploying Kubernetes cluster from Ansible controller..."
