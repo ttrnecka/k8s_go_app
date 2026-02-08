@@ -56,6 +56,11 @@
         group: vagrant
         mode: '0755'
 
+    - name: Deploy Gateway API CRDs
+      shell: kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.0/standard-install.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
     - name: Deploy Traefik RBAC
       shell: kubectl apply -f /home/vagrant/k8s/traefik/traefik-rbac.yaml
       environment:
@@ -68,6 +73,16 @@
 
     - name: Deploy Traefik Service
       shell: kubectl apply -f /home/vagrant/k8s/traefik/traefik-service.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Deploy Traefik controller
+      shell: kubectl apply -f /home/vagrant/k8s/traefik/traefik-controller.yaml
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: Deploy Traefik gateway
+      shell: kubectl apply -f /home/vagrant/k8s/traefik/traefik-gateway.yaml
       environment:
         KUBECONFIG: "{{ kubeconfig }}"
 

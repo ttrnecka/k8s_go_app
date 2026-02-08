@@ -317,11 +317,11 @@ ssh vagrant@192.168.56.11
 TRAEFIK_IP=$(vagrant ssh k8s-master -c "kubectl get svc traefik -n kube-system -o jsonpath='{.status.loadBalancer.ingress[0].ip}'" 2>/dev/null | tr -d '\r')
 
 # Test endpoints
-curl http://${TRAEFIK_IP}/health
-curl http://${TRAEFIK_IP}/ready
+curl -H "Host: myapp.local" http://${TRAEFIK_IP}/health
+curl -H "Host: myapp.local" http://${TRAEFIK_IP}/ready
 
 # Login
-curl -X POST http://${TRAEFIK_IP}/login \
+curl -H "Host: myapp.local" -X POST http://${TRAEFIK_IP}/login \
   -H "Content-Type: application/json" \
   -d '{"username":"testuser","password":"password123"}'
 ```

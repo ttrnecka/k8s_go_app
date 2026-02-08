@@ -19,10 +19,11 @@ spec:
       serviceAccountName: traefik
       containers:
         - name: traefik
-          image: traefik:v2.10
+          image: traefik:v3
           args:
             - --api.insecure=true
-            - --providers.kubernetesingress=true
+            # - --providers.kubernetesingress=true
+            - --providers.kubernetesgateway=true
             - --entrypoints.web.address=:80
             - --log.level=INFO
           ports:
