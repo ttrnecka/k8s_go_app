@@ -341,6 +341,8 @@ kubectl port-forward -n monitoring svc/grafana 3000:3000
 vagrant ssh k8s-master
 kubectl port-forward -n monitoring svc/grafana 3000:3000 --address=0.0.0.0
 # Access http://192.168.56.10:3000 from host
+kubectl port-forward -n monitoring svc/prometheus 9090:9090 --address=0.0.0.0
+# Access http://192.168.56.10:9090 from host
 ```
 
 ## Troubleshooting
